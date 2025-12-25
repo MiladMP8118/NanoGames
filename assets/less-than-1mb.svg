@@ -1,0 +1,45 @@
+<svg width="1200" height="200" viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Less than 1MB">
+  <defs>
+    <!-- Background glow -->
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#00ff88" stop-opacity="0.20"/>
+      <stop offset="55%" stop-color="#00ff88" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Animated gradient -->
+    <linearGradient id="greenGradient" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1200" y2="0">
+      <stop offset="0%" stop-color="#00ff88"/>
+      <stop offset="50%" stop-color="#00cc66"/>
+      <stop offset="100%" stop-color="#009944"/>
+      <animate attributeName="x1" values="-1200;1200;-1200" dur="5s" repeatCount="indefinite"/>
+      <animate attributeName="x2" values="0;2400;0" dur="5s" repeatCount="indefinite"/>
+    </linearGradient>
+
+    <!-- Soft shadow for readability -->
+    <filter id="softShadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Transparent background (looks good on GitHub dark/light) -->
+  <rect x="0" y="0" width="1200" height="200" fill="transparent"/>
+  <ellipse cx="600" cy="92" rx="520" ry="120" fill="url(#bgGlow)"/>
+
+  <!-- Main text -->
+  <g filter="url(#softShadow)">
+    <text
+      x="50%"
+      y="52%"
+      dominant-baseline="middle"
+      text-anchor="middle"
+      font-size="110"
+      font-weight="900"
+      font-family="Segoe UI, Inter, Arial, sans-serif"
+      fill="url(#greenGradient)"
+      letter-spacing="2">
+      &lt; 1MB
+    </text>
+  </g>
+
+</svg>

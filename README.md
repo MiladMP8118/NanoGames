@@ -1,5 +1,7 @@
 
-
+<p align="center">
+  <img src="assets/less-than-1mb.svg" alt="< 1MB Games" />
+</p>
 # 🎮 NanoGames
 
 **Ultra-small games. Maximum creativity.**
