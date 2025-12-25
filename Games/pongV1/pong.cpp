@@ -366,32 +366,6 @@ static void UpdateGame(float dt) {
 
 static void RenderGame(HWND hwnd) {
     (void)hwnd;
-
-    Clear(RGBX(30, 30, 40));
-    DrawCenterLine(RGBX(80, 80, 95));
-
-    uint32_t paddleC = RGBX(15, 232, 73);
-    FillRectI((int)(g_left.x - g_left.w * 0.5f),  (int)(g_left.y - g_left.h * 0.5f),
-              (int)(g_left.x + g_left.w * 0.5f),  (int)(g_left.y + g_left.h * 0.5f), paddleC);
-
-    FillRectI((int)(g_right.x - g_right.w * 0.5f), (int)(g_right.y - g_right.h * 0.5f),
-              (int)(g_right.x + g_right.w * 0.5f), (int)(g_right.y + g_right.h * 0.5f), paddleC);
-
-    uint32_t ballC = RGBX(252, 186, 4);
-    FillRectI((int)(g_ball.x - g_ball.r), (int)(g_ball.y - g_ball.r),
-              (int)(g_ball.x + g_ball.r), (int)(g_ball.y + g_ball.r), ballC);
-
-    // HUD
-    char hud[140];
-    wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   Score: %d - %d", g_scoreL, g_scoreR);
-    DrawTextBB(12, 10, hud, RGB(240, 240, 240));
-
-    if (!g_ball.inPlay) {
-        DrawTextBB(g_w / 2 - 110, g_h / 2 - 10, "Press SPACE to serve", RGB(240, 240, 240));
-    }
-
-    HDC hdc = GetDC(GetForegroundWindow());
-    ReleaseDC(GetForegroundWindow(), hdc);
 }
 
 // ======================================================
