@@ -156,6 +156,8 @@ static int g_aiMoveFrameCounter = 0;
 static int g_aiCheckFrameCounter = 0;
 static int g_aiHitCount = 0;
 static int g_aiMaxMoveDelay = 10;
+static float g_aiCmdVelY = 0.0f;
+static float g_aiVelY = 0.0f;
 
 static float Clamp(float v, float lo, float hi) {
     if (v < lo) return lo;
@@ -174,6 +176,8 @@ static void ResetRound(bool serveToRight) {
     if (g_aiMode) {
         g_aiMoveFrameCounter = 0;
         g_aiCheckFrameCounter = 0;
+        g_aiCmdVelY = 0.0f;
+        g_aiVelY = 0.0f;
         // Determine movement delay based on score difference
         int scoreDiff = g_scoreL - g_scoreR;
         if (scoreDiff >= 2) {
@@ -204,6 +208,8 @@ static void ResetGame() {
     g_aiCheckFrameCounter = 0;
     g_aiMoveDelayFrames = 10;
     g_aiMaxMoveDelay = 10;
+    g_aiCmdVelY = 0.0f;
+    g_aiVelY = 0.0f;
     
     ResetRound(true);
 }
@@ -220,7 +226,7 @@ static void BounceFromPaddle(const Paddle& p, bool isLeft) {
     float rel = (g_ball.y - p.y) / (p.h * 0.5f);
     rel = Clamp(rel, -1.0f, 1.0f);
 
-    float baseSpeed = 380.0f;
+    float baseSpeed = 240.0f;
     float extra = 70.0f * fabsf(rel);
 
     float dir = isLeft ? 1.0f : -1.0f;
@@ -234,6 +240,8 @@ static void BounceFromPaddle(const Paddle& p, bool isLeft) {
     if (g_aiMode && !isLeft) {
         g_aiHitCount++;
         g_aiMoveFrameCounter = 0;
+        g_aiCmdVelY = 0.0f;
+        g_aiVelY = 0.0f;
         
         // Every 7th hit gets perfect response (no movement delay)
         if (g_aiHitCount % 7 == 0) {
@@ -269,25 +277,44 @@ static void UpdateGame(float dt) {
     // Right paddle (human or AI)
     float dyR = 0.0f;
     if (g_aiMode) {
-        // AI checks ball position every 12 frames
+        // AI updates its perceived ball height only every 24 frames (reaction sampling)
         if (g_ball.inPlay && g_ball.vx > 0) { // Ball moving towards AI
             g_aiCheckFrameCounter++;
-            g_aiMoveFrameCounter++;
-            
-            // Update target position every 12 frames
-            if (g_aiCheckFrameCounter >= 38) {
+            if (g_aiCheckFrameCounter >= 24) {
                 g_aiTargetY = g_ball.y;
                 g_aiCheckFrameCounter = 0;
             }
         }
-        
-        // Only move every N frames based on delay
-        if (g_aiMoveFrameCounter >= g_aiMoveDelayFrames) {
+
+        // Smooth movement: update a commanded velocity every N frames, then ease actual velocity toward it.
+        g_aiMoveFrameCounter++;
+        const int delay = (g_aiMoveDelayFrames < 0) ? 0 : g_aiMoveDelayFrames;
+        if (delay == 0 || g_aiMoveFrameCounter >= delay) {
             float diff = g_aiTargetY - g_right.y;
-            if (fabsf(diff) > 2.0f) {
-                if (diff < 0) dyR -= g_right.speed * dt;
-                else dyR += g_right.speed * dt;
+            const float deadZonePx = 2.0f;
+            const float kp = 8.0f; // px -> px/sec
+            if (fabsf(diff) <= deadZonePx) {
+                g_aiCmdVelY = 0.0f;
+            } else {
+                g_aiCmdVelY = Clamp(diff * kp, -g_right.speed, g_right.speed);
             }
+            g_aiMoveFrameCounter = 0;
+        }
+
+        // Ease actual velocity toward command (prevents jitter when diff sign flips)
+        const float accel = 3200.0f; // px/sec^2
+        float dv = g_aiCmdVelY - g_aiVelY;
+        float maxDv = accel * dt;
+        g_aiVelY += Clamp(dv, -maxDv, +maxDv);
+
+        dyR = g_aiVelY * dt;
+
+        // Prevent overshoot: if we're about to cross the target, snap to it and zero velocity.
+        float diffNow = g_aiTargetY - g_right.y;
+        if (fabsf(diffNow) <= fabsf(dyR)) {
+            dyR = diffNow;
+            g_aiVelY = 0.0f;
+            g_aiCmdVelY = 0.0f;
         }
     } else {
         // Human control
@@ -354,7 +381,7 @@ static void RenderGame(HWND hwnd) {
     FillRectI((int)(g_ball.x - g_ball.r), (int)(g_ball.y - g_ball.r),
               (int)(g_ball.x + g_ball.r), (int)(g_ball.y + g_ball.r), ballC);
 
-    // HUD (draw into backbuffer -> no flicker)
+    // HUD
     char hud[140];
     wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   Score: %d - %d", g_scoreL, g_scoreR);
     DrawTextBB(12, 10, hud, RGB(240, 240, 240));
