@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <stdint.h>
 #include <math.h>
+#include <stdlib.h>
+
 
 // ======================================================
 // Backbuffer (DIBSection + Memory DC)  -> no flicker text
@@ -146,6 +148,15 @@ static Paddle g_left{}, g_right{};
 static Ball g_ball{};
 static int g_scoreL = 0, g_scoreR = 0;
 
+// AI mode
+static bool g_aiMode = false;
+static float g_aiTargetY = 0.0f;
+static int g_aiMoveDelayFrames = 0;
+static int g_aiMoveFrameCounter = 0;
+static int g_aiCheckFrameCounter = 0;
+static int g_aiHitCount = 0;
+static int g_aiMaxMoveDelay = 10;
+
 static float Clamp(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
@@ -158,6 +169,21 @@ static void ResetRound(bool serveToRight) {
     g_ball.vx = serveToRight ? 320.0f : -320.0f;
     g_ball.vy = (serveToRight ? 1.0f : -1.0f) * 120.0f;
     g_ball.inPlay = false;
+    
+    // Reset AI movement delay when round starts
+    if (g_aiMode) {
+        g_aiMoveFrameCounter = 0;
+        g_aiCheckFrameCounter = 0;
+        // Determine movement delay based on score difference
+        int scoreDiff = g_scoreL - g_scoreR;
+        if (scoreDiff >= 2) {
+            g_aiMaxMoveDelay = 2;
+        } else {
+            g_aiMaxMoveDelay = (rand() % 2 == 0) ? 6 : 12; // Either 6 or 12 frames
+        }
+        g_aiMoveDelayFrames = g_aiMaxMoveDelay;
+        g_aiTargetY = g_right.y;
+    }
 }
 
 static void ResetGame() {
@@ -171,6 +197,14 @@ static void ResetGame() {
     g_left.y = g_right.y = g_h * 0.5f;
 
     g_ball.r = 8.0f;
+    
+    // Reset AI state
+    g_aiHitCount = 0;
+    g_aiMoveFrameCounter = 0;
+    g_aiCheckFrameCounter = 0;
+    g_aiMoveDelayFrames = 10;
+    g_aiMaxMoveDelay = 10;
+    
     ResetRound(true);
 }
 
@@ -195,19 +229,71 @@ static void BounceFromPaddle(const Paddle& p, bool isLeft) {
 
     if (isLeft) g_ball.x = p.x + p.w * 0.5f + g_ball.r + 1.0f;
     else        g_ball.x = p.x - p.w * 0.5f - g_ball.r - 1.0f;
+    
+    // Track AI hits for perfect response feature
+    if (g_aiMode && !isLeft) {
+        g_aiHitCount++;
+        g_aiMoveFrameCounter = 0;
+        
+        // Every 7th hit gets perfect response (no movement delay)
+        if (g_aiHitCount % 7 == 0) {
+            g_aiMoveDelayFrames = 0;
+        } else {
+            // Adaptive movement delay based on score
+            int scoreDiff = g_scoreL - g_scoreR;
+            if (scoreDiff >= 2) {
+                g_aiMaxMoveDelay = 2;
+            } else {
+                g_aiMaxMoveDelay = (rand() % 2 == 0) ? 6 : 12; // Either 6 or 12 frames
+            }
+            g_aiMoveDelayFrames = g_aiMaxMoveDelay;
+        }
+        g_aiTargetY = g_right.y;
+    }
 }
 
 static void UpdateGame(float dt) {
     if (g_keyPressed[VK_ESCAPE]) g_running = false;
     if (g_keyPressed['R']) ResetGame();
+    if (g_keyPressed['A']) {
+        g_aiMode = !g_aiMode;
+        ResetGame();
+    }
 
-    float dyL = 0.0f, dyR = 0.0f;
+    // Left paddle (always human controlled)
+    float dyL = 0.0f;
     if (g_keyDown['W']) dyL -= g_left.speed * dt;
     if (g_keyDown['S']) dyL += g_left.speed * dt;
-    if (g_keyDown[VK_UP]) dyR -= g_right.speed * dt;
-    if (g_keyDown[VK_DOWN]) dyR += g_right.speed * dt;
-
     g_left.y = Clamp(g_left.y + dyL, g_left.h * 0.5f, g_h - g_left.h * 0.5f);
+
+    // Right paddle (human or AI)
+    float dyR = 0.0f;
+    if (g_aiMode) {
+        // AI checks ball position every 12 frames
+        if (g_ball.inPlay && g_ball.vx > 0) { // Ball moving towards AI
+            g_aiCheckFrameCounter++;
+            g_aiMoveFrameCounter++;
+            
+            // Update target position every 12 frames
+            if (g_aiCheckFrameCounter >= 38) {
+                g_aiTargetY = g_ball.y;
+                g_aiCheckFrameCounter = 0;
+            }
+        }
+        
+        // Only move every N frames based on delay
+        if (g_aiMoveFrameCounter >= g_aiMoveDelayFrames) {
+            float diff = g_aiTargetY - g_right.y;
+            if (fabsf(diff) > 2.0f) {
+                if (diff < 0) dyR -= g_right.speed * dt;
+                else dyR += g_right.speed * dt;
+            }
+        }
+    } else {
+        // Human control
+        if (g_keyDown[VK_UP]) dyR -= g_right.speed * dt;
+        if (g_keyDown[VK_DOWN]) dyR += g_right.speed * dt;
+    }
     g_right.y = Clamp(g_right.y + dyR, g_right.h * 0.5f, g_h - g_right.h * 0.5f);
 
     if (!g_ball.inPlay && g_keyPressed[VK_SPACE]) g_ball.inPlay = true;
@@ -383,8 +469,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
         FillRectI((int)(g_ball.x - g_ball.r), (int)(g_ball.y - g_ball.r),
                   (int)(g_ball.x + g_ball.r), (int)(g_ball.y + g_ball.r), ballC);
 
-        char hud[140];
-        wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   Score: %d - %d", g_scoreL, g_scoreR);
+char hud[180];
+    const char* mode = g_aiMode ? "vs AI" : "vs Human";
+    wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   A=Mode [%s]   Score: %d - %d", mode, g_scoreL, g_scoreR);
         DrawTextBB(12, 10, hud);
 
         if (!g_ball.inPlay) {
