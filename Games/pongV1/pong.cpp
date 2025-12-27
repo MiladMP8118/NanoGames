@@ -144,9 +144,18 @@ struct Ball {
     bool inPlay;
 };
 
+enum AppState {
+    STATE_MENU = 0,
+    STATE_PLAYING = 1,
+};
+
 static Paddle g_left{}, g_right{};
 static Ball g_ball{};
 static int g_scoreL = 0, g_scoreR = 0;
+
+static AppState g_state = STATE_MENU;
+// 0 = 2 Players, 1 = Player vs Computer
+static int g_menuSelection = 0;
 
 // AI mode
 static bool g_aiMode = false;
@@ -163,6 +172,12 @@ static float Clamp(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
     return v;
+}
+
+static void EnterStartMenu() {
+    g_state = STATE_MENU;
+    g_menuSelection = 0;
+    g_ball.inPlay = false;
 }
 
 static void ResetRound(bool serveToRight) {
@@ -263,9 +278,22 @@ static void BounceFromPaddle(const Paddle& p, bool isLeft) {
 static void UpdateGame(float dt) {
     if (g_keyPressed[VK_ESCAPE]) g_running = false;
     if (g_keyPressed['R']) ResetGame();
-    if (g_keyPressed['A']) {
-        g_aiMode = !g_aiMode;
-        ResetGame();
+
+    // Start menu: choose mode before playing
+    if (g_state == STATE_MENU) {
+        if (g_keyPressed[VK_UP] || g_keyPressed['W']) g_menuSelection--;
+        if (g_keyPressed[VK_DOWN] || g_keyPressed['S']) g_menuSelection++;
+        g_menuSelection = (int)Clamp((float)g_menuSelection, 0.0f, 1.0f);
+
+        if (g_keyPressed['1']) g_menuSelection = 0;
+        if (g_keyPressed['2']) g_menuSelection = 1;
+
+        if (g_keyPressed[VK_RETURN] || g_keyPressed[VK_SPACE] || g_keyPressed['1'] || g_keyPressed['2']) {
+            g_aiMode = (g_menuSelection == 1);
+            ResetGame();
+            g_state = STATE_PLAYING;
+        }
+        return;
     }
 
     // Left paddle (always human controlled)
@@ -459,24 +487,40 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
         Clear(RGBX(30, 30, 40));
         DrawCenterLine(RGBX(80, 80, 95));
 
-        uint32_t paddleC = RGBX(15, 232, 73);
-        FillRectI((int)(g_left.x - g_left.w * 0.5f),  (int)(g_left.y - g_left.h * 0.5f),
-                  (int)(g_left.x + g_left.w * 0.5f),  (int)(g_left.y + g_left.h * 0.5f), paddleC);
+        if (g_state == STATE_MENU) {
+            const int cx = g_w / 2;
+            const int top = g_h / 2 - 90;
+            DrawTextBB(cx - 30, top, "PONG");
 
-        FillRectI((int)(g_right.x - g_right.w * 0.5f), (int)(g_right.y - g_right.h * 0.5f),
-                  (int)(g_right.x + g_right.w * 0.5f), (int)(g_right.y + g_right.h * 0.5f), paddleC);
+            const char* opt0 = "1) 2 Players";
+            const char* opt1 = "2) Player vs Computer";
+            COLORREF normal = RGB(240, 240, 240);
+            COLORREF hi = RGB(255, 235, 150);
 
-        uint32_t ballC = RGBX(252, 186, 4);
-        FillRectI((int)(g_ball.x - g_ball.r), (int)(g_ball.y - g_ball.r),
-                  (int)(g_ball.x + g_ball.r), (int)(g_ball.y + g_ball.r), ballC);
+            DrawTextBB(cx - 120, top + 45,  opt0, (g_menuSelection == 0) ? hi : normal);
+            DrawTextBB(cx - 120, top + 70,  opt1, (g_menuSelection == 1) ? hi : normal);
+            DrawTextBB(cx - 120, top + 110, "Use Up/Down then Enter (or press 1/2)");
+            DrawTextBB(cx - 120, top + 130, "ESC = Quit");
+        } else {
+            uint32_t paddleC = RGBX(15, 232, 73);
+            FillRectI((int)(g_left.x - g_left.w * 0.5f),  (int)(g_left.y - g_left.h * 0.5f),
+                      (int)(g_left.x + g_left.w * 0.5f),  (int)(g_left.y + g_left.h * 0.5f), paddleC);
 
-char hud[180];
-    const char* mode = g_aiMode ? "vs AI" : "vs Human";
-    wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   A=Mode [%s]   Score: %d - %d", mode, g_scoreL, g_scoreR);
-        DrawTextBB(12, 10, hud);
+            FillRectI((int)(g_right.x - g_right.w * 0.5f), (int)(g_right.y - g_right.h * 0.5f),
+                      (int)(g_right.x + g_right.w * 0.5f), (int)(g_right.y + g_right.h * 0.5f), paddleC);
 
-        if (!g_ball.inPlay) {
-            DrawTextBB(g_w / 2 - 60, g_h / 2 - 10, "Press SPACE to serve");
+            uint32_t ballC = RGBX(252, 186, 4);
+            FillRectI((int)(g_ball.x - g_ball.r), (int)(g_ball.y - g_ball.r),
+                      (int)(g_ball.x + g_ball.r), (int)(g_ball.y + g_ball.r), ballC);
+
+            char hud[180];
+            const char* mode = g_aiMode ? "vs Computer" : "2 Players";
+            wsprintfA(hud, "W/S (Left)   Up/Down (Right)   Space=Serve   R=Reset   Mode: %s   Score: %d - %d", mode, g_scoreL, g_scoreR);
+            DrawTextBB(12, 10, hud);
+
+            if (!g_ball.inPlay) {
+                DrawTextBB(g_w / 2 - 60, g_h / 2 - 10, "Press SPACE to serve");
+            }
         }
 
         
